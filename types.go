@@ -1,9 +1,12 @@
 package main
 
-import "math/rand"
+import (
+	uuid "github.com/satori/go.uuid"
+	"math/rand"
+)
 
 type Account struct {
-	ID        int    `json:"id"`
+	UUID      string `json:"uuid"`
 	FirstName string `json:"name"`
 	LastName  string `json:"last_name"`
 	Number    int64  `json:"number"`
@@ -12,7 +15,7 @@ type Account struct {
 
 func NewAccount(firstName, lastName string) *Account {
 	return &Account{
-		ID:        rand.Intn(10000),
+		UUID:      uuid.NewV4().String(),
 		FirstName: firstName,
 		LastName:  lastName,
 		Number:    int64(rand.Intn(100000)),
