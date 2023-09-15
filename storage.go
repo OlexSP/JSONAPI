@@ -16,28 +16,28 @@ type PostgresStorage struct {
 	db *sql.DB
 }
 
-func (p PostgresStorage) CreateAccount(account *Account) error {
+func (p *PostgresStorage) CreateAccount(account *Account) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p PostgresStorage) DeleteAccount(accountUUID string) error {
+func (p *PostgresStorage) DeleteAccount(accountUUID string) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p PostgresStorage) UpdateAccount(account *Account) error {
+func (p *PostgresStorage) UpdateAccount(account *Account) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
+func (p *PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
 func NewPostgresStorage() (*PostgresStorage, error) {
-	conStr := "user=admin dbname=gobank-postgres password=gobank sslmode=verify-full"
+	conStr := "user=postgres dbname=postgres password=gobank sslmode=disable"
 	db, err := sql.Open("postgres", conStr)
 	if err != nil {
 		return nil, err
