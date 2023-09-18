@@ -3,12 +3,14 @@ package main
 import (
 	"database/sql"
 	_ "github.com/lib/pq"
+	"log/slog"
 )
 
 type Storage interface {
 	CreateAccount(account *Account) error
 	DeleteAccount(accountUUID string) error
 	UpdateAccount(account *Account) error
+	GetAccounts() ([]*Account, error)
 	GetAccount(accountUUID string) (*Account, error)
 }
 
@@ -22,11 +24,11 @@ func (s *PostgresStorage) Init() error {
 
 func (s *PostgresStorage) createAccountTable() error {
 	query := `create table if not exists account (
-		id serial primary key,
+		id uuid primary key,
 		first_name varchar(50),
 		last_name varchar(50),
 		number serial,
-		balance int,
+		balance serial,
 		created_at timestamp
 	)`
 
@@ -35,8 +37,26 @@ func (s *PostgresStorage) createAccountTable() error {
 }
 
 func (s *PostgresStorage) CreateAccount(account *Account) error {
-	//TODO implement me
-	panic("implement me")
+	queryString := `
+	insert into account 
+	(id, first_name, last_name, number, balance, created_at)
+	values ($1, $2, $3, $4, $5, $6)
+	`
+	resp, err := s.db.Query(queryString,
+		account.UUID,
+		account.FirstName,
+		account.LastName,
+		account.Number,
+		account.Balance,
+		account.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	slog.Info("CreateAccount done")
+	slog.Info("resp", resp)
+
+	return nil
 }
 
 func (s *PostgresStorage) DeleteAccount(accountUUID string) error {
@@ -47,6 +67,33 @@ func (s *PostgresStorage) DeleteAccount(accountUUID string) error {
 func (s *PostgresStorage) UpdateAccount(account *Account) error {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
+	rows, err := s.db.Query("select * from account")
+	if err != nil {
+		return nil, err
+	}
+
+	var accounts []*Account
+
+	for rows.Next() {
+		account := &Account{}
+		if err := rows.Scan(
+			&account.UUID,
+			&account.FirstName,
+			&account.LastName,
+			&account.Number,
+			&account.Balance,
+			&account.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		accounts = append(accounts, account)
+	}
+
+	return accounts, nil
 }
 
 func (s *PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
