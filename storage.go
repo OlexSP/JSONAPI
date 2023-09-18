@@ -16,22 +16,40 @@ type PostgresStorage struct {
 	db *sql.DB
 }
 
-func (p *PostgresStorage) CreateAccount(account *Account) error {
+func (s *PostgresStorage) Init() error {
+	return s.createAccountTable()
+}
+
+func (s *PostgresStorage) createAccountTable() error {
+	query := `create table if not exists account (
+		id serial primary key,
+		first_name varchar(50),
+		last_name varchar(50),
+		number serial,
+		balance int,
+		created_at timestamp
+	)`
+
+	_, err := s.db.Exec(query)
+	return err
+}
+
+func (s *PostgresStorage) CreateAccount(account *Account) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p *PostgresStorage) DeleteAccount(accountUUID string) error {
+func (s *PostgresStorage) DeleteAccount(accountUUID string) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p *PostgresStorage) UpdateAccount(account *Account) error {
+func (s *PostgresStorage) UpdateAccount(account *Account) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p *PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
+func (s *PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
 	//TODO implement me
 	panic("implement me")
 }

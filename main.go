@@ -13,6 +13,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := storage.Init(); err != nil {
+		slog.Error("can't init storage", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("%+v\n", storage)
 
 	server := NewAPIServer(":3000", storage)
