@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	uuid "github.com/satori/go.uuid"
 	"log/slog"
 	"net/http"
 
@@ -54,9 +55,17 @@ func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) err
 }
 
 func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request) error {
-	slog.Info("Implement GetAccountByID")
+	idStr := mux.Vars(r)["id"]
 
-	account := NewAccount("John", "Doe")
+	id, err := uuid.FromString(idStr)
+	if err != nil {
+		return fmt.Errorf("invalid id %s", idStr)
+	}
+
+	account, err := s.storage.GetAccountByID(id)
+	if err != nil {
+		return err
+	}
 
 	return WriteJSON(w, http.StatusOK, account)
 }
@@ -93,7 +102,7 @@ func WriteJSON(w http.ResponseWriter, statusCode int, v any) error {
 type apiFunc func(w http.ResponseWriter, r *http.Request) error
 
 type ApiError struct {
-	Error string
+	Error string `json:"error"`
 }
 
 func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {

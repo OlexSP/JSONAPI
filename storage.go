@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
 	"log/slog"
 )
 
@@ -11,7 +13,7 @@ type Storage interface {
 	DeleteAccount(accountUUID string) error
 	UpdateAccount(account *Account) error
 	GetAccounts() ([]*Account, error)
-	GetAccount(accountUUID string) (*Account, error)
+	GetAccountByID(accountUUID uuid.UUID) (*Account, error)
 }
 
 type PostgresStorage struct {
@@ -78,27 +80,27 @@ func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
 	var accounts []*Account
 
 	for rows.Next() {
-		account := &Account{}
-		if err := rows.Scan(
-			&account.UUID,
-			&account.FirstName,
-			&account.LastName,
-			&account.Number,
-			&account.Balance,
-			&account.CreatedAt,
-		); err != nil {
+		account, err := scanIntoAccount(rows)
+		if err != nil {
 			return nil, err
 		}
-
 		accounts = append(accounts, account)
 	}
 
 	return accounts, nil
 }
 
-func (s *PostgresStorage) GetAccount(accountUUID string) (*Account, error) {
-	//TODO implement me
-	panic("implement me")
+func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error) {
+	rows, err := s.db.Query("select * from account where id = $1", accountUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		return scanIntoAccount(rows)
+	}
+
+	return nil, fmt.Errorf("account %s not found", accountUUID)
 }
 
 func NewPostgresStorage() (*PostgresStorage, error) {
@@ -115,4 +117,18 @@ func NewPostgresStorage() (*PostgresStorage, error) {
 	return &PostgresStorage{
 		db: db,
 	}, nil
+}
+
+func scanIntoAccount(rows *sql.Rows) (*Account, error) {
+	account := &Account{}
+	err := rows.Scan(
+		&account.UUID,
+		&account.FirstName,
+		&account.LastName,
+		&account.Number,
+		&account.Balance,
+		&account.CreatedAt,
+	)
+
+	return account, err
 }

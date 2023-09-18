@@ -9,12 +9,12 @@ import (
 func main() {
 	storage, err := NewPostgresStorage()
 	if err != nil {
-		slog.Error("can't create storage", err)
+		slog.Error("can't create storage", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
 	if err := storage.Init(); err != nil {
-		slog.Error("can't init storage", err)
+		slog.Error("can't init storage", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
