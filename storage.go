@@ -10,7 +10,7 @@ import (
 
 type Storage interface {
 	CreateAccount(account *Account) error
-	DeleteAccount(accountUUID string) error
+	DeleteAccount(accountUUID uuid.UUID) error
 	UpdateAccount(account *Account) error
 	GetAccounts() ([]*Account, error)
 	GetAccountByID(accountUUID uuid.UUID) (*Account, error)
@@ -61,9 +61,19 @@ func (s *PostgresStorage) CreateAccount(account *Account) error {
 	return nil
 }
 
-func (s *PostgresStorage) DeleteAccount(accountUUID string) error {
-	//TODO implement me
-	panic("implement me")
+func (s *PostgresStorage) DeleteAccount(accountUUID uuid.UUID) error {
+	result, err := s.db.Exec("DELETE FROM account WHERE id = $1", accountUUID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("account with ID %s does not exist", accountUUID.String())
+	}
+	return nil
 }
 
 func (s *PostgresStorage) UpdateAccount(account *Account) error {
