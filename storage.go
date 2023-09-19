@@ -25,7 +25,7 @@ func (s *PostgresStorage) Init() error {
 }
 
 func (s *PostgresStorage) createAccountTable() error {
-	query := `create table if not exists account (
+	query := `CREATE TABLE IF NOT EXISTS account (
 		id uuid primary key,
 		first_name varchar(50),
 		last_name varchar(50),
@@ -40,11 +40,11 @@ func (s *PostgresStorage) createAccountTable() error {
 
 func (s *PostgresStorage) CreateAccount(account *Account) error {
 	queryString := `
-	insert into account 
+	INSERT INTO  account 
 	(id, first_name, last_name, number, balance, created_at)
 	values ($1, $2, $3, $4, $5, $6)
 	`
-	resp, err := s.db.Query(queryString,
+	resp, err := s.db.Exec(queryString,
 		account.UUID,
 		account.FirstName,
 		account.LastName,
@@ -55,14 +55,18 @@ func (s *PostgresStorage) CreateAccount(account *Account) error {
 		return err
 	}
 
-	slog.Info("CreateAccount done")
-	slog.Info("resp", resp)
+	slog.Info("Account created", slog.Any("response", resp))
 
 	return nil
 }
 
 func (s *PostgresStorage) DeleteAccount(accountUUID uuid.UUID) error {
-	result, err := s.db.Exec("DELETE FROM account WHERE id = $1", accountUUID)
+	queryString := `
+		DELETE FROM account 
+       	WHERE id = $1
+       	`
+
+	result, err := s.db.Exec(queryString, accountUUID)
 	if err != nil {
 		return err
 	}
@@ -82,7 +86,12 @@ func (s *PostgresStorage) UpdateAccount(account *Account) error {
 }
 
 func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
-	rows, err := s.db.Query("select * from account")
+	queryString := `
+		SELECT * 
+		FROM account
+       	`
+
+	rows, err := s.db.Query(queryString)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +110,13 @@ func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
 }
 
 func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error) {
-	rows, err := s.db.Query("select * from account where id = $1", accountUUID)
+	queryString := `
+		SELECT * 
+		FROM account 
+		WHERE id = $1
+       	`
+
+	rows, err := s.db.Query(queryString, accountUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +130,7 @@ func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error
 
 func NewPostgresStorage() (*PostgresStorage, error) {
 	conStr := "user=postgres dbname=postgres password=gobank sslmode=disable"
+
 	db, err := sql.Open("postgres", conStr)
 	if err != nil {
 		return nil, err
