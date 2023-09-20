@@ -116,6 +116,7 @@ func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
 			// handle error
+			slog.Error("Error", slog.String("error", err.Error()))
 			WriteJSON(w, http.StatusBadRequest, ApiError{Error: err.Error()})
 		}
 	}
@@ -126,7 +127,7 @@ func getID(r *http.Request) (uuid.UUID, error) {
 
 	id, err := uuid.FromString(idStr)
 	if err != nil {
-		return id, fmt.Errorf("invalid id %s", idStr)
+		return id, fmt.Errorf("invalid ID %s", idStr)
 	}
 
 	return id, nil

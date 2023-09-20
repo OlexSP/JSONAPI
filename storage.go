@@ -35,6 +35,9 @@ func (s *PostgresStorage) createAccountTable() error {
 	)`
 
 	_, err := s.db.Exec(query)
+
+	slog.Info(query, slog.Any("error", err))
+
 	return err
 }
 
@@ -55,7 +58,7 @@ func (s *PostgresStorage) CreateAccount(account *Account) error {
 		return err
 	}
 
-	slog.Info("Account created", slog.Any("response", resp))
+	slog.Info("Account created", slog.Any("accountID", account.UUID), slog.Any("response", resp))
 
 	return nil
 }
@@ -75,8 +78,11 @@ func (s *PostgresStorage) DeleteAccount(accountUUID uuid.UUID) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("account with ID %s does not exist", accountUUID.String())
+		return fmt.Errorf("invalid ID %s ", accountUUID.String())
 	}
+
+	slog.Info(queryString, slog.Any("accountID", accountUUID))
+
 	return nil
 }
 
@@ -106,6 +112,8 @@ func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
 		accounts = append(accounts, account)
 	}
 
+	slog.Info(queryString, slog.Any("accounts", accounts))
+
 	return accounts, nil
 }
 
@@ -125,7 +133,7 @@ func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error
 		return scanIntoAccount(rows)
 	}
 
-	return nil, fmt.Errorf("account %s not found", accountUUID)
+	return nil, fmt.Errorf("invalid ID %s", accountUUID)
 }
 
 func NewPostgresStorage() (*PostgresStorage, error) {
