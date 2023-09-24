@@ -29,7 +29,7 @@ func (s *PostgresStorage) createAccountTable() error {
 		id uuid primary key,
 		first_name varchar(50),
 		last_name varchar(50),
-		number serial,
+		number varchar(35),
 		balance serial,
 		created_at timestamp
 	)`
@@ -128,6 +128,8 @@ func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error
 	if err != nil {
 		return nil, err
 	}
+
+	slog.Info(queryString, slog.Any("err", err), slog.Any("ID", accountUUID))
 
 	for rows.Next() {
 		return scanIntoAccount(rows)
