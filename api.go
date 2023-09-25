@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	tokenTTL = 24 * time.Hour
+	tokenTTL = 12 * time.Hour
 )
 
 type APIServer struct {
@@ -34,7 +34,7 @@ func (s *APIServer) Run() {
 
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleGetAccount)).Methods(http.MethodGet)
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleCreateAccount)).Methods(http.MethodPost)
-	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID))).Methods(http.MethodGet)
+	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID), s.storage)).Methods(http.MethodGet)
 	router.HandleFunc("/account/{id}", makeHTTPHandleFunc(s.handleDeleteAccount)).Methods(http.MethodDelete)
 	router.HandleFunc("/transfer", makeHTTPHandleFunc(s.handleTransfer)).Methods(http.MethodPost)
 
@@ -60,7 +60,7 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	return WriteJSON(w, http.StatusCreated, account)
+	return WriteJSON(w, http.StatusCreated, tokenString)
 }
 
 func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
@@ -114,47 +114,6 @@ func WriteJSON(w http.ResponseWriter, statusCode int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func createJWT(account *Account) (string, error) {
-	secret := os.Getenv("JWT_SECRET")
-
-	claims := &jwt.MapClaims{
-		"ExpiresAt":     time.Now().Add(tokenTTL).Unix(),
-		"AccountNumber": account.Number,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	return token.SignedString([]byte(secret))
-}
-
-func withJWTAuth(handlerFunc http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("JWT auth middleware")
-
-		tokenString := r.Header.Get("Authorization")
-
-		_, err := validateJWT(tokenString)
-		if err != nil {
-			WriteJSON(w, http.StatusUnauthorized, ApiError{Error: "invalid token"})
-			return
-		}
-		handlerFunc(w, r)
-	}
-}
-
-func validateJWT(tokenString string) (*jwt.Token, error) {
-	secret := os.Getenv("JWT_SECRET")
-
-	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// algorithm validation
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-
-		return []byte(secret), nil
-	})
-}
-
 type apiFunc func(w http.ResponseWriter, r *http.Request) error
 
 type ApiError struct {
@@ -180,4 +139,77 @@ func getID(r *http.Request) (uuid.UUID, error) {
 	}
 
 	return id, nil
+}
+
+func createJWT(account *Account) (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+
+	claims := &jwt.MapClaims{
+		"ExpiresAt":     time.Now().Add(tokenTTL).Unix(),
+		"AccountNumber": account.Number,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString([]byte(secret))
+}
+
+func permissionDenied(w http.ResponseWriter) {
+	WriteJSON(w, http.StatusUnauthorized, ApiError{Error: "permission denied"})
+}
+
+func withJWTAuth(handlerFunc http.HandlerFunc, s Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("withJWTAuth")
+
+		tokenString := r.Header.Get("Authorization")
+		slog.Info(tokenString)
+		token, err := validateJWT(tokenString)
+		if err != nil {
+			permissionDenied(w)
+			slog.Info("withJWTAuth validation", slog.String("error", err.Error()))
+			return
+		}
+		if !token.Valid {
+			permissionDenied(w)
+			return
+		}
+
+		userID, err := getID(r)
+		if err != nil {
+			permissionDenied(w)
+			return
+		}
+
+		account, err := s.GetAccountByID(userID)
+		if err != nil {
+			permissionDenied(w)
+			return
+		}
+
+		claims := token.Claims.(jwt.MapClaims)
+
+		slog.Info(fmt.Sprintf("clames type: %T, claims: -%[1]v-", claims["AccountNumber"]))
+		slog.Info(fmt.Sprintf("accNumber type: %T, accNumber: -%[1]v-", account.Number))
+
+		if account.Number != claims["AccountNumber"] {
+			permissionDenied(w)
+			return
+		}
+
+		handlerFunc(w, r)
+	}
+}
+
+func validateJWT(tokenString string) (*jwt.Token, error) {
+	secret := os.Getenv("JWT_SECRET")
+
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// algorithm validation
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return []byte(secret), nil
+	})
 }
