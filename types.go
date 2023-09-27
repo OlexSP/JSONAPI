@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/crypto/bcrypt"
 	"math/rand"
 	"time"
 )
@@ -10,6 +11,16 @@ import (
 const (
 	countryCode = "UA"
 )
+
+type LoginRequest struct {
+	Number   string `json:"number"`
+	Password string `json:"password"`
+}
+
+type loginResponse struct {
+	Number string `json:"number"`
+	Token  string `json:"token"`
+}
 
 type TransferRequest struct {
 	ToAccountNumber string `json:"to_account_number"`
@@ -19,6 +30,7 @@ type TransferRequest struct {
 type CreateAccountRequest struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
+	Password  string `json:"password"`
 }
 
 type Account struct {
@@ -26,18 +38,24 @@ type Account struct {
 	FirstName string    `json:"name"`
 	LastName  string    `json:"last_name"`
 	Number    string    `json:"number"`
+	Encrypted string    `json:"-"`
 	Balance   int64     `json:"balance"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func NewAccount(firstName, lastName string) *Account {
+func NewAccount(firstName, lastName, password string) (*Account, error) {
+	passwordEnc, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("can't hash password: %w", err)
+	}
 	return &Account{
 		UUID:      uuid.NewV4(),
 		FirstName: firstName,
 		LastName:  lastName,
+		Encrypted: string(passwordEnc),
 		Number:    ibanGenerator(),
 		CreatedAt: time.Now().UTC(),
-	}
+	}, nil
 }
 
 func ibanGenerator() string {

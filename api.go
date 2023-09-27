@@ -3,18 +3,24 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	uuid "github.com/satori/go.uuid"
+	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
-	tokenTTL = 12 * time.Hour
+	tokenTTL            = 12 * time.Hour
+	authorizationHeader = "Authorization"
+	loginURL            = "/login"
+	accountURL          = "/account"
+	accountIdURL        = "/account/{id}"
+	transferURL         = "/transfer"
 )
 
 type APIServer struct {
@@ -32,26 +38,30 @@ func NewAPIServer(listenAddr string, storage Storage) *APIServer {
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleGetAccount)).Methods(http.MethodGet)
-	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleCreateAccount)).Methods(http.MethodPost)
-	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleGetAccountByID), s.storage)).Methods(http.MethodGet)
-	router.HandleFunc("/account/{id}", makeHTTPHandleFunc(s.handleDeleteAccount)).Methods(http.MethodDelete)
-	router.HandleFunc("/transfer", makeHTTPHandleFunc(s.handleTransfer)).Methods(http.MethodPost)
+	router.HandleFunc(loginURL, errorMiddleware(s.handleLogin)).Methods(http.MethodPost)
+	router.HandleFunc(accountURL, errorMiddleware(s.handleGetAccount)).Methods(http.MethodGet)
+	router.HandleFunc(accountURL, errorMiddleware(s.handleCreateAccount)).Methods(http.MethodPost)
+	router.HandleFunc(accountIdURL, withJWTAuthMiddleware(errorMiddleware(s.handleGetAccountByID), s.storage)).Methods(http.MethodGet)
+	router.HandleFunc(accountIdURL, errorMiddleware(s.handleDeleteAccount)).Methods(http.MethodDelete)
+	router.HandleFunc(transferURL, errorMiddleware(s.handleTransfer)).Methods(http.MethodPost)
 
 	slog.Info("API server listening on", slog.String("address", s.listenAddr))
 
 	http.ListenAndServe(s.listenAddr, router)
 }
 
-func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
-	createAccReq := new(CreateAccountRequest)
-	if err := json.NewDecoder(r.Body).Decode(createAccReq); err != nil {
+func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return err
 	}
 
-	account := NewAccount(createAccReq.FirstName, createAccReq.LastName)
+	account, err := s.storage.GetAccountByNumber(req.Number)
+	if err != nil {
+		return err
+	}
 
-	if err := s.storage.CreateAccount(account); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(account.Encrypted), []byte(req.Password)); err != nil {
 		return err
 	}
 
@@ -60,7 +70,29 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	return WriteJSON(w, http.StatusCreated, tokenString)
+	response := loginResponse{
+		Number: account.Number,
+		Token:  tokenString,
+	}
+	return WriteJSON(w, http.StatusOK, response)
+}
+
+func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
+	req := new(CreateAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		return err
+	}
+
+	account, err := NewAccount(req.FirstName, req.LastName, req.Password)
+	if err != nil {
+		return err
+	}
+
+	if err := s.storage.CreateAccount(account); err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusCreated, account.UUID.String())
 }
 
 func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
@@ -120,7 +152,7 @@ type ApiError struct {
 	Error string `json:"error"`
 }
 
-func makeHTTPHandleFunc(f apiFunc) http.HandlerFunc {
+func errorMiddleware(f apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
 			// handle error
@@ -158,16 +190,16 @@ func permissionDenied(w http.ResponseWriter) {
 	WriteJSON(w, http.StatusUnauthorized, ApiError{Error: "permission denied"})
 }
 
-func withJWTAuth(handlerFunc http.HandlerFunc, s Storage) http.HandlerFunc {
+func withJWTAuthMiddleware(handlerFunc http.HandlerFunc, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("withJWTAuth")
+		slog.Info("withJWTAuthMiddleware")
 
-		tokenString := r.Header.Get("Authorization")
+		tokenString := r.Header.Get(authorizationHeader)
 		slog.Info(tokenString)
 		token, err := validateJWT(tokenString)
 		if err != nil {
 			permissionDenied(w)
-			slog.Info("withJWTAuth validation", slog.String("error", err.Error()))
+			slog.Info("withJWTAuthMiddleware validation", slog.String("error", err.Error()))
 			return
 		}
 		if !token.Valid {

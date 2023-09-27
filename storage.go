@@ -14,6 +14,7 @@ type Storage interface {
 	UpdateAccount(account *Account) error
 	GetAccounts() ([]*Account, error)
 	GetAccountByID(accountUUID uuid.UUID) (*Account, error)
+	GetAccountByNumber(accountNumber string) (*Account, error)
 }
 
 type PostgresStorage struct {
@@ -31,7 +32,8 @@ func (s *PostgresStorage) createAccountTable() error {
 		last_name varchar(50),
 		number varchar(35),
 		balance serial,
-		created_at timestamp
+		created_at timestamp,
+        password_hash varchar(255)
 	)`
 
 	_, err := s.db.Exec(query)
@@ -44,21 +46,22 @@ func (s *PostgresStorage) createAccountTable() error {
 func (s *PostgresStorage) CreateAccount(account *Account) error {
 	queryString := `
 	INSERT INTO  account 
-	(id, first_name, last_name, number, balance, created_at)
-	values ($1, $2, $3, $4, $5, $6)
+	(id, first_name, last_name, number, balance, created_at, password_hash)
+	values ($1, $2, $3, $4, $5, $6, $7)
 	`
-	resp, err := s.db.Exec(queryString,
+	_, err := s.db.Exec(queryString,
 		account.UUID,
 		account.FirstName,
 		account.LastName,
 		account.Number,
 		account.Balance,
-		account.CreatedAt)
+		account.CreatedAt,
+		account.Encrypted)
 	if err != nil {
 		return err
 	}
 
-	slog.Info("Account created", slog.Any("accountID", account.UUID), slog.Any("response", resp))
+	slog.Info("Account created", slog.Any("accountID", account.UUID))
 
 	return nil
 }
@@ -117,6 +120,27 @@ func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
 	return accounts, nil
 }
 
+func (s *PostgresStorage) GetAccountByNumber(accountNumber string) (*Account, error) {
+	queryString := `
+		SELECT * 
+		FROM account 
+		WHERE number = $1
+       	`
+
+	rows, err := s.db.Query(queryString, accountNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info(queryString, slog.Any("err", err), slog.Any("Account Number", accountNumber))
+
+	for rows.Next() {
+		return scanIntoAccount(rows)
+	}
+
+	return nil, fmt.Errorf("invalid Account Number %s", accountNumber)
+}
+
 func (s *PostgresStorage) GetAccountByID(accountUUID uuid.UUID) (*Account, error) {
 	queryString := `
 		SELECT * 
@@ -164,6 +188,7 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 		&account.Number,
 		&account.Balance,
 		&account.CreatedAt,
+		&account.Encrypted,
 	)
 
 	return account, err
